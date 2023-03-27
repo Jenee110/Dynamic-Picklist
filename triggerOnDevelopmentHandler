@@ -1,0 +1,382 @@
+global class triggerOnDevelopmentHandler{
+    
+ @future(callout=true) 
+    webService static void addDevelopmentNameToPickListValues(String leadObj,String picklistToUpdate, 
+       list<String> developmentNameSet){
+           
+        system.debug('leadObj******'+leadObj);        
+        system.debug('picklistToUpdate******'+ picklistToUpdate);        
+        system.debug('developmentNameSet******'+ developmentNameSet);
+           
+        set<String> existingPicklistValuesForLead = new set<String>();
+           
+        existingPicklistValuesForLead = fetchExistingPickListValue(leadObj,picklistToUpdate);
+                
+        system.debug('-existingPicklistValuesForLead-'+ existingPicklistValuesForLead);
+        
+        MetadataService.MetadataPort service = new MetadataService.MetadataPort();
+        service.SessionHeader = new MetadataService.SessionHeader_element();
+        service.SessionHeader.sessionId = UserInfo.getSessionId();
+        system.debug('service.SessionHeader.sessionId-----'+service.SessionHeader.sessionId);
+                
+       MetadataService.ReadCustomFieldResult customFieldOfLeadResult = 
+            (MetadataService.ReadCustomFieldResult) service.readMetadata('CustomField', new String[] { 
+             'Lead.Developments__c' });       
+               system.debug('-customFieldOfLead-'+customFieldOfLeadResult);
+        
+        
+        // Add pick list values
+        if(developmentNameSet != null && !developmentNameSet.isEmpty()){
+            for(String str: developmentNameSet){
+                if(!existingPicklistValuesForLead.contains(str)){                   
+                    system.debug('-str1-'+str);
+                    MetadataService.CustomValue valueToAdd = new MetadataService.CustomValue();
+                    valueToAdd.fullName = str;
+                    valueToAdd.default_x=false;
+                    system.debug('-valueToAdd-'+valueToAdd);
+                    customFieldOfLeadResult.records[0].valueSet.valueSetDefinition.value.add(valueToAdd);
+                }
+                else{
+                     System.debug('already exist');
+                }
+            }
+        }
+        
+        system.debug('customFieldOfLeadResult.records[0].valueSet.valueSetDefinition------'+JSON.serializePretty(customFieldOfLeadResult.records[0].valueSet.valueSetDefinition));
+        System.debug('customFieldOfLeadResult.records[0]-- '+customFieldOfLeadResult.records[0]);
+        MetadataService.SaveResult result = service.updateMetadata(new MetadataService.Metadata[] 
+        {customFieldOfLeadResult.records[0]})[0];
+        system.debug('-Result-'+result);
+        }
+    
+    @future (callout = true) 
+    webService static void updateDevelopmentNameToPickListValues(String leadObj,String picklistToUpdate, String 
+      jsonOldMap, String jsonNewMap)
+        {
+            
+		system.debug('leadObj******'+leadObj);        
+        system.debug('jsonOldMap******'+jsonOldMap);
+        system.debug('jsonNewMap******'+jsonNewMap);
+        system.debug('picklistToUpdate******'+picklistToUpdate);
+        
+        map<id, sObject> oldMap = (Map<id, sObject>) JSON.deserialize(jsonOldMap, map<id, sobject>.class);
+        map<id, sObject> newMap = (Map<id, sObject>) JSON.deserialize(jsonNewMap, map<id, sobject>.class);
+        system.debug('oldMap------'+oldMap);
+        system.debug('newMap------'+newMap);
+        system.debug('oldMap.values()-----'+oldMap.values());
+        system.debug('newMap.values()-----'+newMap.values());
+        
+        map<String,String> existingPicklistLabelVsValuesForLeadMap = new map<String,String>();
+        existingPicklistLabelVsValuesForLeadMap = fetchExistingPickListLabelVsValues(leadObj,picklistToUpdate);
+        system.debug('-existingPicklistLabelVsValuesForLeadMap-'+JSON.serializePretty(existingPicklistLabelVsValuesForLeadMap));
+        
+        map<Object,Object> objMap = new map<Object,Object>();
+        map<String,String> developmentOldAndNewValue = new map<String,String>();
+        
+        for (sObject obj : newMap.values()) {
+            sObject oldObj = oldMap.get(obj.Id);
+            system.debug('obj-------'+oldObj.get('Name'));
+            if (obj.get('Name') != oldObj.get('Name')) {
+                objMap.put(oldObj.get('Name'), obj.get('Name'));
+                developmentOldAndNewValue.put(string.valueOf(oldObj.get('Name')),string.valueOf(obj.get('Name')));
+            }
+        }
+        system.debug('objMap-------'+objMap); 
+        system.debug('-developmentOldAndNewValue-'+developmentOldAndNewValue);   
+        system.debug('-key-'+developmentOldAndNewValue.keySet());  
+        
+        MetadataService.MetadataPort service = new MetadataService.MetadataPort();
+        service.SessionHeader = new MetadataService.SessionHeader_element();
+        service.SessionHeader.sessionId = UserInfo.getSessionId();
+        system.debug('service.SessionHeader.sessionId-----'+service.SessionHeader.sessionId);
+        
+       MetadataService.ReadCustomFieldResult customFieldOfLeadResult = 
+            (MetadataService.ReadCustomFieldResult) service.readMetadata('CustomField', new String[] { 
+             'Lead.Developments__c' });       
+               system.debug('-customFieldOfLead-'+customFieldOfLeadResult);     
+        
+        system.debug('***** customFieldOfLead.valueSet.valueSetDefinition.value'+customFieldOfLeadResult);
+        
+        
+        
+        for(MetadataService.CustomValue objCustomValue : customFieldOfLeadResult.records[0].valueSet.valueSetDefinition.value){
+            system.debug('**** Inside here -- '+objCustomValue.fullName);
+            if(objMap != null && objMap.containsKey(objCustomValue.label) && 
+            existingPicklistLabelVsValuesForLeadMap.containsKey(objCustomValue.label) &&      
+            existingPicklistLabelVsValuesForLeadMap.get(objCustomValue.label) == objCustomValue.fullName){                
+                //objCustomValue.fullName = String.valueOf(objMap.get(objCustomValue.fullName)); // New API Value
+                objCustomValue.label = String.valueOf(objMap.get(objCustomValue.label)); // New Label value      
+                system.debug('objCustomValue-------'+objCustomValue);          
+            }
+        }
+        
+        
+        
+        String developmentName = '';
+        Integer  increment=0;
+        set<String> inActiveValuesToDelete = new set<String>();
+        if(objMap.keySet() != null){
+            for(Object str: objMap.keySet()){
+                String s = String.valueOf(str);
+                
+                if(increment< objMap.size()-1){
+                    
+                    developmentName += '\''+ s +'\'' +',';
+                }else {
+                    developmentName += '\''+s+'\'';  
+                }
+                increment++;
+                inActiveValuesToDelete.add(s);
+            }
+        }
+        List<Lead> updateLeadList =  new list<lead>();
+        if(developmentName != ''){
+            system.debug('-developmentName-'+developmentName);
+            String query = 'select id,Developments__c from lead where Developments__c INCLUDES(' 
+            +developmentName + ')';
+            system.debug('-query-'+query);
+            list<Lead> leadList = new list<Lead>();
+            leadList = Database.query(query);
+            system.debug('-leadList-'+leadList);
+            
+            
+            if(!leadList.isEmpty()){
+                for(Lead ledObj : leadList){
+                    system.debug('-Developments__c-'+ledObj.Developments__c);
+                    
+                    String[] developmentLeadName = ledObj.Developments__c.split(';');
+                    String updateDevelopmentName = '';
+                    system.debug('-size-'+developmentLeadName.size());
+                    
+                    increment=0;
+                    if(updateDevelopmentName == ''){
+                        for(String str : developmentLeadName){
+                            if(increment< developmentLeadName.size()-1){
+                                if(developmentOldAndNewValue.containskey(str) && 
+                                    existingPicklistLabelVsValuesForLeadMap.containsKey(str)){
+                                    updateDevelopmentName += existingPicklistLabelVsValuesForLeadMap.get(str) + ';';
+                                }else{
+                                    updateDevelopmentName += str + ';'; 
+                                }
+                            }else if(developmentOldAndNewValue.containskey(str) && 
+                               existingPicklistLabelVsValuesForLeadMap.containsKey(str)){
+                                updateDevelopmentName += existingPicklistLabelVsValuesForLeadMap.get(str);
+                            } else {
+                                updateDevelopmentName += str ; 
+                            }
+                            increment++;
+                        }
+                    }
+                    ledObj.Developments__c = updateDevelopmentName;
+                    developmentLeadName.clear();
+                    updateLeadList.add(ledObj);
+                    system.debug('-updateDevelopmentName1-'+ledObj.Developments__c);
+                }
+            }
+            
+            system.debug('-updateLeadList-'+updateLeadList);
+        }
+        
+        system.debug('inActiveValuesToDelete------'+inActiveValuesToDelete);
+
+        MetadataService.SaveResult result = service.updateMetadata(new 
+         MetadataService.Metadata[] {customFieldOfLeadResult.records[0]})[0];
+        system.debug('result---------------'+result);
+                   
+        try{
+            if(!updateLeadList.isEmpty()){
+                update updateLeadList;
+            }
+            
+        }catch(Exception exc){
+            system.debug('-exc-'+exc);
+        }
+    }  
+    
+   @future (callout = true) 
+    webService static void pickListValuesDelete (String leadObj,String picklistToUpdate, 
+                 		String jsonOldMap){
+            
+		system.debug('leadObj******'+leadObj);        
+        system.debug('jsonOldMap******'+jsonOldMap);
+        system.debug('picklistToUpdate******'+picklistToUpdate);
+        
+        map<id, sObject> oldMap = (Map<id, sObject>) JSON.deserialize(jsonOldMap, map<id, sobject>.class);
+                            
+        system.debug('oldMap------'+oldMap);
+        system.debug('oldMap.values()-----'+oldMap.values());
+        
+        map<String,String> existingPicklistLabelVsValuesForLeadMap = new map<String,String>();
+        existingPicklistLabelVsValuesForLeadMap = fetchExistingPickListLabelVsValues(leadObj,picklistToUpdate);
+        system.debug('-existingPicklistLabelVsValuesForLeadMap-'+JSON.serializePretty(existingPicklistLabelVsValuesForLeadMap));
+        
+        map<Object,Object> objMap = new map<Object,Object>();
+        map<String,String> developmentOldAndNewValue = new map<String,String>();
+        
+        for (sObject obj : oldMap.values()) {
+            sObject oldObj = oldMap.get(obj.Id);
+            system.debug('obj-------'+oldObj.get('Name'));
+            if (obj.get('Name') == oldObj.get('Name')) {
+                objMap.put(oldObj.get('Name'), obj.get('Name'));
+                developmentOldAndNewValue.put(string.valueOf(oldObj.get('Name')),string.valueOf(obj.get('Name')));
+            }
+        }
+        system.debug('objMap-------'+objMap); 
+        system.debug('-developmentOldAndNewValue-'+developmentOldAndNewValue);   
+        system.debug('-key-'+developmentOldAndNewValue.keySet());  
+        
+        MetadataService.MetadataPort service = new MetadataService.MetadataPort();
+        service.SessionHeader = new MetadataService.SessionHeader_element();
+        service.SessionHeader.sessionId = UserInfo.getSessionId();
+        system.debug('service.SessionHeader.sessionId-----'+service.SessionHeader.sessionId);
+        
+       MetadataService.ReadCustomFieldResult customFieldOfLeadResult = 
+            (MetadataService.ReadCustomFieldResult) service.readMetadata('CustomField', new String[] { 
+             'Lead.Developments__c' });       
+               system.debug('-customFieldOfLead-'+customFieldOfLeadResult);     
+        
+        system.debug('***** customFieldOfLead.valueSet.valueSetDefinition.value'+customFieldOfLeadResult);
+        
+        
+        
+        for(MetadataService.CustomValue objCustomValue : customFieldOfLeadResult.records[0].valueSet.valueSetDefinition.value){
+            system.debug('**** Inside here -- '+objCustomValue.fullName);
+            if(objMap != null && objMap.containsKey(objCustomValue.label) && 
+            existingPicklistLabelVsValuesForLeadMap.containsKey(objCustomValue.label) &&      
+            existingPicklistLabelVsValuesForLeadMap.get(objCustomValue.label) == objCustomValue.fullName){                
+                objCustomValue.fullName = String.valueOf(objMap.get(objCustomValue.fullName)); // New API Value
+                objCustomValue.label = String.valueOf(objMap.get(objCustomValue.label)); // New Label value 
+                objCustomValue.isActive = false;
+                system.debug('objCustomValue-------'+objCustomValue);          
+            }
+        }
+        
+        
+        
+        String developmentName = '';
+        Integer  increment=0;
+        set<String> inActiveValuesToDelete = new set<String>();
+        if(objMap.keySet() != null){
+            for(Object str: objMap.keySet()){
+                String s = String.valueOf(str);
+                
+                if(increment< objMap.size()-1){
+                    
+                    developmentName += '\''+ s +'\'' +',';
+                }else {
+                    developmentName += '\''+s+'\'';  
+                }
+                increment++;
+                inActiveValuesToDelete.add(s);
+            }
+        }
+        List<Lead> updateLeadList =  new list<lead>();
+        if(developmentName != ''){
+            system.debug('-developmentName-'+developmentName);
+            String query = 'select id,Developments__c from lead where Developments__c INCLUDES(' 
+            +developmentName + ')';
+            system.debug('-query-'+query);
+            list<Lead> leadList = new list<Lead>();
+            leadList = Database.query(query);
+            system.debug('-leadList-'+leadList);
+            
+            
+            if(!leadList.isEmpty()){
+                for(Lead ledObj : leadList){
+                    system.debug('-Developments__c-'+ledObj.Developments__c);
+                    
+                    String[] developmentLeadName = ledObj.Developments__c.split(';');
+                    String updateDevelopmentName = '';
+                    system.debug('-size-'+developmentLeadName.size());
+                    
+                    increment=0;
+                    if(updateDevelopmentName == ''){
+                        for(String str : developmentLeadName){
+                            if(increment< developmentLeadName.size()-1){
+                                if(developmentOldAndNewValue.containskey(str) && 
+                                    existingPicklistLabelVsValuesForLeadMap.containsKey(str)){
+                                    updateDevelopmentName += existingPicklistLabelVsValuesForLeadMap.get(str) + ';';
+                                }else{
+                                    updateDevelopmentName += str + ';'; 
+                                }
+                            }else if(developmentOldAndNewValue.containskey(str) && 
+                               existingPicklistLabelVsValuesForLeadMap.containsKey(str)){
+                                updateDevelopmentName += existingPicklistLabelVsValuesForLeadMap.get(str);
+                            } else {
+                                updateDevelopmentName += str ; 
+                            }
+                            increment++;
+                        }
+                    }
+                    ledObj.Developments__c = updateDevelopmentName;
+                    developmentLeadName.clear();
+                    //updateLeadList.add(ledObj);
+                    system.debug('-updateDevelopmentName1-'+ledObj.Developments__c);
+                }
+            }
+            
+            system.debug('-updateLeadList-'+updateLeadList);
+        }
+        
+        system.debug('inActiveValuesToDelete------'+inActiveValuesToDelete);
+ 
+        MetadataService.SaveResult result = service.updateMetadata(new 
+         MetadataService.Metadata[] {customFieldOfLeadResult.records[0]})[0];
+        system.debug('result---------------'+result);
+            
+       
+        
+        try{
+            if(!updateLeadList.isEmpty()){
+                update updateLeadList;
+            }
+            
+        }catch(Exception exc){
+            system.debug('-exc-'+exc);
+        }
+                
+
+            }
+  
+ 
+    public static set<String> fetchExistingPickListValue(String Obj, String picklistToUpdate){
+        SobjectType objType   = Schema.getGlobalDescribe().get(Obj);
+        system.debug('objType ' +objType);
+        Map<String,Schema.SObjectField> objFields = objType.getDescribe().fields.getMap();
+        SObjectField fieldName = objFields.get(picklistToUpdate);
+        system.debug('fieldName-------'+fieldName);
+        
+        Schema.DescribeFieldResult fieldResult = fieldName.getDescribe();
+        fieldResult = fieldResult.getSObjectField().getDescribe();
+        system.debug('fieldResult-------'+fieldResult); 
+        
+        List<Schema.PicklistEntry> ple = fieldResult.getPicklistValues();
+        system.debug('ple------'+ple);
+        set<String> existingPicklistValues = new set<String>();
+        for( Schema.PicklistEntry pickListVal : ple){
+            existingPicklistValues.add(pickListVal.getValue());
+            system.debug('-label-'+pickListVal.getLabel());
+        } 
+        return existingPicklistValues;
+    }   
+
+    public static map<String,String> fetchExistingPickListLabelVsValues(String Obj, String picklistToUpdate){
+        SobjectType objType   = Schema.getGlobalDescribe().get(Obj);
+        Map<String,Schema.SObjectField> objFields = objType.getDescribe().fields.getMap();
+        SObjectField fieldName = objFields.get(picklistToUpdate);
+        system.debug('fieldName-------'+fieldName);
+        
+        Schema.DescribeFieldResult fieldResult = fieldName.getDescribe();
+        fieldResult = fieldResult.getSObjectField().getDescribe();
+        system.debug('fieldResult-------'+fieldResult); 
+        
+        List<Schema.PicklistEntry> ple = fieldResult.getPicklistValues();
+        system.debug('ple------'+ple);
+        map<String,String> existingPicklistLabelVsValuesMap = new map<String,String>();
+        for( Schema.PicklistEntry pickListVal : ple){
+            existingPicklistLabelVsValuesMap.put(pickListVal.getLabel(),pickListVal.getValue());
+            system.debug('-label-'+pickListVal.getLabel());
+        } 
+        return existingPicklistLabelVsValuesMap;
+    }       
+}
