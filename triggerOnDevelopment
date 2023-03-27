@@ -1,0 +1,103 @@
+trigger triggerOnDevelopment on Development__c (after insert, after update, after delete) {
+    if(trigger.isInsert){
+        set<String> developmentNameSetInsert = new set<String>();
+        set<String> developmentIdSetInsert = new set<String>();
+        list<String> developmentNameListInsert = new list<String>();
+        for(Development__c dev: trigger.New){
+            developmentIdSetInsert.add(dev.Id);
+            developmentNameSetInsert.add(dev.Name);
+        }
+        for(String str: developmentNameSetInsert){
+            developmentNameListInsert.add(str);
+        }
+        system.debug('developmentIdSetInsert-----'+ developmentIdSetInsert);
+        system.debug('developmentNameSetInsert-----'+ developmentNameSetInsert);
+        system.debug('developmentNameListInsert------'+ developmentNameListInsert);
+        String leadObj = 'Lead';
+        String picklistToUpdate = 'Developments__c';
+        
+        if(developmentNameListInsert != null && !developmentNameListInsert.isEmpty()){
+            triggerOnDevelopmentHandler.addDevelopmentNameToPickListValues(leadObj,picklistToUpdate,       
+              developmentNameListInsert);
+            system.debug('leadObj' + leadObj);
+            system.debug('picklistToUpdate' + picklistToUpdate);
+            system.debug('developmentNameListInsert' + developmentNameListInsert);
+           }
+        }
+    
+   if(trigger.isUpdate){
+        String leadObj = 'Lead';
+        String picklistToUpdate = 'Developments__c';
+        List<Development__c> developmentList = [select id,name from Development__c where id In :Trigger.New];
+
+        system.debug('-developmentList-'+ developmentList);
+        
+        set<String> developmentNameSetUpdate = new set<String>();
+        set<String> developmentIdSetUpdate = new set<String>();
+        list<String> developmentNameListUpdate = new list<String>();
+        
+        for(Development__c dev: trigger.New){
+            developmentIdSetUpdate.add(dev.Id);
+            developmentNameSetUpdate.add(dev.Name);
+        }
+        
+       for(String str: developmentNameSetUpdate){
+            developmentNameListUpdate.add(str);
+        }
+        system.debug('developmentIdSetUpdate-----'+developmentIdSetUpdate);
+        system.debug('developmentNameSetUpdate-----'+developmentNameSetUpdate);
+        system.debug('developmentNameListUpdate------'+developmentNameListUpdate);
+        
+        String jsonOldMap = JSON.serialize(Trigger.oldMap);
+        system.debug('jsonOldMap-------'+jsonOldMap);
+        
+        String jsonNewMap = JSON.serialize(Trigger.newMap);
+        system.debug('jsonNewMap-------'+jsonNewMap);
+        
+        if(developmentNameListUpdate != null && !developmentNameListUpdate.isEmpty()){
+          
+         triggerOnDevelopmentHandler.updateDevelopmentNameToPickListValues(leadObj,picklistToUpdate, 
+          jsonOldMap, jsonNewMap);
+            
+            System.debug('leadObj' + leadObj );
+            System.debug('picklistToUpdate' + picklistToUpdate );
+            System.debug('jsonOldMap' + jsonOldMap );
+            System.debug('jsonNewMap' + jsonNewMap );
+        } 
+    }
+    
+     if(trigger.isDelete){
+         
+        System.debug('Record Deleted');
+        String leadObj = 'Lead';
+        String picklistToUpdate = 'Developments__c';
+         
+        set<String> developmentNameSetDelete = new set<String>();
+        set<String> developmentIdSetDelete = new set<String>();
+        list<String> developmentNameListDelete = new list<String>();
+         
+         for(Development__c dev: Trigger.old){
+             developmentIdSetDelete.add(dev.Id);
+             developmentNameSetDelete.add(dev.Name);             
+         }
+         
+         for(String str: developmentNameSetDelete){
+            developmentNameListDelete.add(str);
+        }
+         
+         System.debug('developmentIdSetDelete' + developmentIdSetDelete);
+         System.debug('developmentNameSetDelete' + developmentNameSetDelete);
+         System.debug('developmentNameListDelete' + developmentNameListDelete);
+         
+        String jsonOldMap = JSON.serialize(Trigger.oldMap);
+        system.debug('jsonOldMap-------'+jsonOldMap);
+
+         
+          if(developmentNameListDelete != null && !developmentNameListDelete.isEmpty()){          
+         	triggerOnDevelopmentHandler.pickListValuesDelete(leadObj,picklistToUpdate, 
+           jsonOldMap);
+            
+        } 
+    }
+    
+}
